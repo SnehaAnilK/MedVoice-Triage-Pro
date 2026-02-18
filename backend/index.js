@@ -7,17 +7,14 @@ require('dotenv').config();
 
 const app = express();
 
-// --- 1. ROBUST CORS CONFIG ---
-// This tells the browser to allow the Vercel frontend to send audio files.
-const corsOptions = {
+// --- 1. THE PERMANENT CORS FIX ---
+// This handles both regular requests AND the "Pre-flight" (OPTIONS) requests automatically.
+app.use(cors({
   origin: "https://med-voice-triage-pro.vercel.app",
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // This handles the "Pre-flight" request
+  credentials: true
+}));
 
 app.use(express.json());
 
@@ -42,16 +39,15 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Health Check
 app.get('/', (req, res) => {
-  res.status(200).send('MedVoice Backend is Online');
+  res.status(200).send('MedVoice Backend is Online and Healthy!');
 });
 
 // Triage API
 app.post('/api/triage', upload.single('audio'), async (req, res) => {
-  console.log("Triage request received...");
+  console.log(" Triage request received");
   try {
     if (!req.file) return res.status(400).json({ error: "No audio" });
 
-    // Using stable gemini-1.5-flash for reliability
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
     const audioPart = {
@@ -64,7 +60,7 @@ app.post('/api/triage', upload.single('audio'), async (req, res) => {
     const prompt = `Analyze patient symptoms from the audio. Return ONLY JSON: {"severity": "Low"|"Medium"|"High", "reasoning": "one sentence explanation", "department": "ER"|"General Physician"|"Pharmacy"}`;
 
     const result = await model.generateContent([prompt, audioPart]);
-    const responseText = await result.response.text();
+    const responseText = result.response.text();
     const cleanedJson = responseText.replace(/```json|```/g, "").trim();
     const analysis = JSON.parse(cleanedJson);
 
