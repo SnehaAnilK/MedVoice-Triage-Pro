@@ -7,16 +7,13 @@ require('dotenv').config();
 
 const app = express();
 
-// --- 1. CORS CONFIGURATION ---
-// Explicitly allowing your Vercel URL to prevent security blocks
+// --- 1. SIMPLIFIED CORS ---
+// Using the standard middleware without wildcards to avoid PathErrors
 app.use(cors({
   origin: "https://med-voice-triage-pro.vercel.app",
   methods: ["GET", "POST", "OPTIONS"],
   credentials: true
 }));
-
-// FIXED: The new syntax for wildcard pre-flight handling
-app.options('(.*)', cors()); 
 
 app.use(express.json());
 
@@ -24,8 +21,8 @@ app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected Successfully"))
-  .catch(err => console.error("❌ MongoDB Connection Error:", err));
+  .then(() => console.log("MongoDB Connected Successfully"))
+  .catch(err => console.error("MongoDB Connection Error:", err));
 
 const Triage = mongoose.model('Triage', new mongoose.Schema({
   severity: String,
@@ -39,18 +36,18 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // --- 4. ROUTES ---
 
-// Health Check
+// Health Check - Simplified route
 app.get('/', (req, res) => {
-  res.status(200).send('MedVoice Backend is Alive and Healthy!');
+  res.status(200).send('MedVoice Backend is Online');
 });
 
-// Triage API
+// Triage API - Ensuring direct path string
 app.post('/api/triage', upload.single('audio'), async (req, res) => {
-  console.log("📥 Incoming Request to /api/triage");
+  console.log("📥 Triage request received");
   try {
-    if (!req.file) return res.status(400).json({ error: "No audio file" });
+    if (!req.file) return res.status(400).json({ error: "No audio" });
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const audioPart = {
       inlineData: { data: req.file.buffer.toString("base64"), mimeType: req.file.mimetype }
     };
@@ -62,18 +59,18 @@ app.post('/api/triage', upload.single('audio'), async (req, res) => {
     const analysis = JSON.parse(cleanedJson);
 
     await new Triage(analysis).save();
-    console.log("✅ Analysis Saved:", analysis.severity);
+    console.log(" Saved to Atlas:", analysis.severity);
     res.json(analysis);
 
   } catch (error) {
-    console.error("❌ Triage Error:", error.message);
+    console.error(" Error:", error.message);
     res.status(500).json({ error: "Analysis failed", details: error.message });
   }
 });
 
 // --- 5. SERVER START ---
-// Render automatically provides a PORT environment variable (usually 10000)
 const PORT = process.env.PORT || 10000;
+// We listen on 0.0.0.0 to ensure the host maps correctly on Render
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server listening on port ${PORT}`);
+  console.log(` Server listening on port ${PORT}`);
 });
