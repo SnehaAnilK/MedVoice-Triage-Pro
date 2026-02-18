@@ -9,7 +9,11 @@ const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*', // This allows any frontend to talk to your backend
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type']
+}));
 app.use(express.json());
 
 // 1. Database Connection
