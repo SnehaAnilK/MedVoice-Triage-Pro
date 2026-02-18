@@ -36,7 +36,7 @@ function App() {
     formData.append('audio', audioBlob);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/triage', formData);
+      const response = await axios.post('https://medvoice-backend.onrender.com/api/triage', formData);
       setResult(response.data);
     } catch (error) {
       console.error("Error analyzing audio", error);
