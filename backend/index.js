@@ -7,17 +7,14 @@ require('dotenv').config();
 
 const app = express();
 
-// --- 1. MIDDLEWARE & CORS ---
-// Explicitly allowing your Vercel frontend to talk to this Render backend
+// --- 1. CORS CONFIGURATION ---
+// This handles both regular requests and "OPTIONS" pre-flight checks automatically.
 app.use(cors({
   origin: "https://med-voice-triage-pro.vercel.app",
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
-
-// This handles the "Pre-flight" OPTIONS request browsers send before a POST
-app.options('*', cors()); 
 
 app.use(express.json());
 
@@ -42,16 +39,16 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Health Check
 app.get('/', (req, res) => {
-  res.status(200).send('MedVoice Backend is Online');
+  res.status(200).send('MedVoice Backend is Online and Healthy!');
 });
 
 // Triage API
 app.post('/api/triage', upload.single('audio'), async (req, res) => {
-  console.log("📥 Triage request received...");
+  console.log("📥 Triage request received");
   try {
     if (!req.file) return res.status(400).json({ error: "No audio" });
 
-    // Use stable gemini-1.5-flash
+    // Using gemini-1.5-flash for production stability
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     const audioPart = {
@@ -61,7 +58,7 @@ app.post('/api/triage', upload.single('audio'), async (req, res) => {
       },
     };
 
-    const prompt = `Analyze patient symptoms. Return ONLY JSON: {"severity": "Low"|"Medium"|"High", "reasoning": "...", "department": "..."}`;
+    const prompt = `Analyze patient symptoms from the audio. Return ONLY JSON: {"severity": "Low"|"Medium"|"High", "reasoning": "one sentence explanation", "department": "ER"|"General Physician"|"Pharmacy"}`;
 
     const result = await model.generateContent([prompt, audioPart]);
     const responseText = result.response.text();
@@ -73,7 +70,7 @@ app.post('/api/triage', upload.single('audio'), async (req, res) => {
     res.json(analysis);
 
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    console.error("❌ Backend Error:", error.message);
     res.status(500).json({ error: "Analysis failed", details: error.message });
   }
 });
