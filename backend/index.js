@@ -10,9 +10,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Middleware
 app.use(cors({
-  origin: '*', // This allows any frontend to talk to your backend
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type']
+  origin: true, // This dynamically allows whatever origin is sending the request
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
@@ -34,6 +35,7 @@ const Triage = mongoose.model('Triage', TriageSchema);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // 4. Triage API Route
+app.get('/', (req, res) => res.send('Server is alive and healthy!'));
 app.post('/api/triage', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
