@@ -7,28 +7,21 @@ require('dotenv').config();
 
 const app = express();
 
-// --- 1. MIDDLEWARE & CORS ---
-// Using origin: true allows the server to accept requests from your Vercel URL dynamically.
+// --- 1. CORS CONFIGURATION ---
+// Explicitly allowing your Vercel URL to prevent security blocks
 app.use(cors({
-  origin: true, 
+  origin: "https://med-voice-triage-pro.vercel.app",
   methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
 
-// Explicitly handle pre-flight requests to prevent CORS blocks on POST calls
-app.options('*', cors()); 
+// FIXED: The new syntax for wildcard pre-flight handling
+app.options('(.*)', cors()); 
 
 app.use(express.json());
 
-// --- 2. STORAGE CONFIG ---
+// --- 2. STORAGE & DATABASE ---
 const upload = multer({ storage: multer.memoryStorage() });
-
-// --- 3. DATABASE CONNECTION ---
-// Using a check to ensure MONGO_URI exists before trying to connect
-if (!process.env.MONGO_URI) {
-  console.error("❌ Error: MONGO_URI is missing from environment variables.");
-}
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected Successfully"))
@@ -41,65 +34,46 @@ const Triage = mongoose.model('Triage', new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 }));
 
-// --- 4. AI CONFIG ---
+// --- 3. AI CONFIG ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// --- 5. ROUTES ---
+// --- 4. ROUTES ---
 
-// Health Check - This MUST return 200 OK for Render to consider the service "Live"
+// Health Check
 app.get('/', (req, res) => {
-  res.status(200).send('Server is alive and healthy!');
+  res.status(200).send('MedVoice Backend is Alive and Healthy!');
 });
 
-// The Main Triage Logic
+// Triage API
 app.post('/api/triage', upload.single('audio'), async (req, res) => {
-  console.log("📥 Received a triage request...");
-
+  console.log("📥 Incoming Request to /api/triage");
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No audio file received" });
-    }
+    if (!req.file) return res.status(400).json({ error: "No audio file" });
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const audioPart = {
-      inlineData: {
-        data: req.file.buffer.toString("base64"),
-        mimeType: req.file.mimetype,
-      },
+      inlineData: { data: req.file.buffer.toString("base64"), mimeType: req.file.mimetype }
     };
 
-    const prompt = `Analyze this patient's symptoms from the audio. 
-    Respond ONLY with a JSON object: 
-    {
-      "severity": "Low" | "Medium" | "High",
-      "reasoning": "one sentence explanation",
-      "department": "ER" | "General Physician" | "Pharmacy"
-    }`;
+    const prompt = `Analyze patient symptoms. Return ONLY JSON: {"severity": "Low"|"Medium"|"High", "reasoning": "...", "department": "..."}`;
 
     const result = await model.generateContent([prompt, audioPart]);
-    const responseText = result.response.text();
-    
-    // Clean up Gemini's response to ensure it's valid JSON
-    const cleanedJson = responseText.replace(/```json|```/g, "").trim();
+    const cleanedJson = result.response.text().replace(/```json|```/g, "").trim();
     const analysis = JSON.parse(cleanedJson);
 
-    // Save the record to MongoDB Atlas
-    const newTriage = new Triage(analysis);
-    await newTriage.save();
-
-    console.log("✅ Triage complete and saved to DB");
+    await new Triage(analysis).save();
+    console.log("✅ Analysis Saved:", analysis.severity);
     res.json(analysis);
 
   } catch (error) {
-    console.error("❌ Backend Error:", error);
+    console.error("❌ Triage Error:", error.message);
     res.status(500).json({ error: "Analysis failed", details: error.message });
   }
 });
 
-// --- 6. START SERVER ---
-// Using 10000 as the default to align with Render's internal routing
-const PORT = process.env.PORT || 10000; 
+// --- 5. SERVER START ---
+// Render automatically provides a PORT environment variable (usually 10000)
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server listening on port ${PORT}`);
 });
