@@ -38,14 +38,11 @@ function App() {
     formData.append('audio', audioBlob);
 
     try {
-      // Updated with explicit headers for file uploads
-      const response = await axios.post('https://medvoice-backend.onrender.com/api/triage', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      // Use your live Render URL
+      const response = await axios.post('https://medvoice-triage-pro.onrender.com/api/triage', formData);
       setResult(response.data);
     } catch (error) {
       console.error("Error analyzing audio", error);
-      alert("Network Error: Could not reach the medical AI. Check console for details.");
     }
     setLoading(false);
   };
@@ -59,7 +56,7 @@ function App() {
           </div>
           <h1 className="text-xl font-bold text-slate-800 tracking-tight">MedVoice <span className="text-blue-600">AI</span></h1>
         </div>
-        <div className="flex items-center gap-4 text-sm font-medium text-slate-500 text-[10px] uppercase tracking-widest">
+        <div className="flex items-center gap-4 text-sm font-medium text-slate-500 uppercase tracking-widest text-[10px]">
           <span className="flex items-center gap-1"><Clock size={16}/> Real-time Triage</span>
         </div>
       </nav>

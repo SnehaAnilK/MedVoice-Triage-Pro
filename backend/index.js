@@ -7,20 +7,23 @@ require('dotenv').config();
 
 const app = express();
 
-// --- 1. THE PERMANENT CORS FIX ---
-// This will allow your Vercel app to talk to Render without any "Blocked" errors.
+// --- 1. MIDDLEWARE & CORS ---
+// Explicitly allowing your Vercel frontend to talk to this Render backend
 app.use(cors({
-  origin: "https://med-voice-triage-pro.vercel.app", 
+  origin: "https://med-voice-triage-pro.vercel.app",
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
-app.options('*', cors());
+
+// This handles the "Pre-flight" OPTIONS request browsers send before a POST
+app.options('*', cors()); 
 
 app.use(express.json());
+
+// --- 2. STORAGE & DATABASE ---
 const upload = multer({ storage: multer.memoryStorage() });
 
-// --- 2. DATABASE ---
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected Successfully"))
   .catch(err => console.error("❌ MongoDB Connection Error:", err));
@@ -37,18 +40,18 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // --- 4. ROUTES ---
 
-// Health check to verify the 404 is gone
+// Health Check
 app.get('/', (req, res) => {
-  res.status(200).send('MedVoice Backend is Online and Healthy!');
+  res.status(200).send('MedVoice Backend is Online');
 });
 
-// The main triage route
+// Triage API
 app.post('/api/triage', upload.single('audio'), async (req, res) => {
-  console.log("📥 Received audio for analysis...");
+  console.log("📥 Triage request received...");
   try {
-    if (!req.file) return res.status(400).json({ error: "No audio file" });
+    if (!req.file) return res.status(400).json({ error: "No audio" });
 
-    // Use the stable 1.5-flash model name
+    // Use stable gemini-1.5-flash
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     const audioPart = {
@@ -58,7 +61,7 @@ app.post('/api/triage', upload.single('audio'), async (req, res) => {
       },
     };
 
-    const prompt = `Analyze symptoms. Return ONLY JSON: {"severity": "Low"|"Medium"|"High", "reasoning": "...", "department": "..."}`;
+    const prompt = `Analyze patient symptoms. Return ONLY JSON: {"severity": "Low"|"Medium"|"High", "reasoning": "...", "department": "..."}`;
 
     const result = await model.generateContent([prompt, audioPart]);
     const responseText = result.response.text();
@@ -66,15 +69,16 @@ app.post('/api/triage', upload.single('audio'), async (req, res) => {
     const analysis = JSON.parse(cleanedJson);
 
     await new Triage(analysis).save();
-    console.log("✅ Analysis complete:", analysis.severity);
+    console.log("✅ Saved to Atlas:", analysis.severity);
     res.json(analysis);
 
   } catch (error) {
-    console.error("❌ Backend Error:", error.message);
+    console.error("❌ Error:", error.message);
     res.status(500).json({ error: "Analysis failed", details: error.message });
   }
 });
 
+// --- 5. SERVER START ---
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server listening on port ${PORT}`);
