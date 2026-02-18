@@ -10,10 +10,12 @@ const app = express();
 // --- 1. THE PERMANENT CORS FIX ---
 // This will allow your Vercel app to talk to Render without any "Blocked" errors.
 app.use(cors({
-  origin: "*", // Allows any frontend to connect - safest for debugging deployment
+  origin: "https://med-voice-triage-pro.vercel.app", 
   methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 }));
+app.options('*', cors());
 
 app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
