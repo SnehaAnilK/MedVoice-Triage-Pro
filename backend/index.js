@@ -49,7 +49,7 @@ app.post('/api/triage', upload.single('audio'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No audio" });
 
     // Using gemini-1.5-flash for production stability
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
     const audioPart = {
       inlineData: {
