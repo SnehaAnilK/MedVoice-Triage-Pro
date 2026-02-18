@@ -17,7 +17,7 @@ Backend: Node.js, Express, Multer.
 
 Database: MongoDB Atlas.
 
-AI Model: Google Gemini 1.5 Flash.
+AI Model: Google Gemini 2.5 Flash.
 
 Setup and Installation
 Clone the repository:
@@ -42,3 +42,4 @@ npm install
 npm run dev
 
 Developed by Sneha A | PES University | SRN: PES1UG23CS582
+
