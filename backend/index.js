@@ -6,40 +6,58 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
 
-// Middleware
+// --- 1. MIDDLEWARE & CORS ---
+// Using origin: true allows the server to accept requests from your Vercel URL dynamically.
 app.use(cors({
-  origin: true, // This dynamically allows whatever origin is sending the request
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: true, 
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 }));
+
+// Explicitly handle pre-flight requests to prevent CORS blocks on POST calls
+app.options('*', cors()); 
+
 app.use(express.json());
 
-// 1. Database Connection
+// --- 2. STORAGE CONFIG ---
+const upload = multer({ storage: multer.memoryStorage() });
+
+// --- 3. DATABASE CONNECTION ---
+// Using a check to ensure MONGO_URI exists before trying to connect
+if (!process.env.MONGO_URI) {
+  console.error("❌ Error: MONGO_URI is missing from environment variables.");
+}
+
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected Successfully"))
   .catch(err => console.error("❌ MongoDB Connection Error:", err));
 
-// 2. Database Schema
-const TriageSchema = new mongoose.Schema({
+const Triage = mongoose.model('Triage', new mongoose.Schema({
   severity: String,
   reasoning: String,
   department: String,
   createdAt: { type: Date, default: Date.now }
-});
-const Triage = mongoose.model('Triage', TriageSchema);
+}));
 
-// 3. AI Configuration
+// --- 4. AI CONFIG ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// 4. Triage API Route
-app.get('/', (req, res) => res.send('Server is alive and healthy!'));
+// --- 5. ROUTES ---
+
+// Health Check - This MUST return 200 OK for Render to consider the service "Live"
+app.get('/', (req, res) => {
+  res.status(200).send('Server is alive and healthy!');
+});
+
+// The Main Triage Logic
 app.post('/api/triage', upload.single('audio'), async (req, res) => {
+  console.log("📥 Received a triage request...");
+
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "No audio file uploaded" });
+      return res.status(400).json({ error: "No audio file received" });
     }
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -51,34 +69,37 @@ app.post('/api/triage', upload.single('audio'), async (req, res) => {
       },
     };
 
-    const prompt = `Analyze this patient's voice description of their symptoms. 
-    Return ONLY a JSON object with the following keys:
-    "severity": "Low" | "Medium" | "High",
-    "reasoning": "short explanation of the symptoms described",
-    "department": "ER" | "General Physician" | "Pharmacy"`;
+    const prompt = `Analyze this patient's symptoms from the audio. 
+    Respond ONLY with a JSON object: 
+    {
+      "severity": "Low" | "Medium" | "High",
+      "reasoning": "one sentence explanation",
+      "department": "ER" | "General Physician" | "Pharmacy"
+    }`;
 
     const result = await model.generateContent([prompt, audioPart]);
     const responseText = result.response.text();
     
-    // Clean JSON formatting from Gemini
+    // Clean up Gemini's response to ensure it's valid JSON
     const cleanedJson = responseText.replace(/```json|```/g, "").trim();
     const analysis = JSON.parse(cleanedJson);
 
-    // 5. Save to MongoDB
-    const newTriage = new Triage({
-      severity: analysis.severity,
-      reasoning: analysis.reasoning,
-      department: analysis.department
-    });
+    // Save the record to MongoDB Atlas
+    const newTriage = new Triage(analysis);
     await newTriage.save();
 
+    console.log("✅ Triage complete and saved to DB");
     res.json(analysis);
 
   } catch (error) {
-    console.error("Analysis Error:", error);
-    res.status(500).json({ error: "Analysis failed" });
+    console.error("❌ Backend Error:", error);
+    res.status(500).json({ error: "Analysis failed", details: error.message });
   }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// --- 6. START SERVER ---
+// Using 10000 as the default to align with Render's internal routing
+const PORT = process.env.PORT || 10000; 
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server listening on port ${PORT}`);
+});
