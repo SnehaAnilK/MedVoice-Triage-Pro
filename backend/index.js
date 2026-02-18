@@ -7,13 +7,17 @@ require('dotenv').config();
 
 const app = express();
 
-// --- 1. SIMPLIFIED CORS ---
-// Using the standard middleware without wildcards to avoid PathErrors
-app.use(cors({
+// --- 1. ROBUST CORS CONFIG ---
+// This tells the browser to allow the Vercel frontend to send audio files.
+const corsOptions = {
   origin: "https://med-voice-triage-pro.vercel.app",
   methods: ["GET", "POST", "OPTIONS"],
-  credentials: true
-}));
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // This handles the "Pre-flight" request
 
 app.use(express.json());
 
@@ -21,8 +25,8 @@ app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected Successfully"))
-  .catch(err => console.error("MongoDB Connection Error:", err));
+  .then(() => console.log(" MongoDB Connected Successfully"))
+  .catch(err => console.error(" MongoDB Connection Error:", err));
 
 const Triage = mongoose.model('Triage', new mongoose.Schema({
   severity: String,
@@ -36,26 +40,32 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // --- 4. ROUTES ---
 
-// Health Check - Simplified route
+// Health Check
 app.get('/', (req, res) => {
   res.status(200).send('MedVoice Backend is Online');
 });
 
-// Triage API - Ensuring direct path string
+// Triage API
 app.post('/api/triage', upload.single('audio'), async (req, res) => {
-  console.log("📥 Triage request received");
+  console.log("Triage request received...");
   try {
     if (!req.file) return res.status(400).json({ error: "No audio" });
 
+    // Using stable gemini-1.5-flash for reliability
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    
     const audioPart = {
-      inlineData: { data: req.file.buffer.toString("base64"), mimeType: req.file.mimetype }
+      inlineData: {
+        data: req.file.buffer.toString("base64"),
+        mimeType: req.file.mimetype || "audio/webm",
+      },
     };
 
-    const prompt = `Analyze patient symptoms. Return ONLY JSON: {"severity": "Low"|"Medium"|"High", "reasoning": "...", "department": "..."}`;
+    const prompt = `Analyze patient symptoms from the audio. Return ONLY JSON: {"severity": "Low"|"Medium"|"High", "reasoning": "one sentence explanation", "department": "ER"|"General Physician"|"Pharmacy"}`;
 
     const result = await model.generateContent([prompt, audioPart]);
-    const cleanedJson = result.response.text().replace(/```json|```/g, "").trim();
+    const responseText = await result.response.text();
+    const cleanedJson = responseText.replace(/```json|```/g, "").trim();
     const analysis = JSON.parse(cleanedJson);
 
     await new Triage(analysis).save();
@@ -63,14 +73,13 @@ app.post('/api/triage', upload.single('audio'), async (req, res) => {
     res.json(analysis);
 
   } catch (error) {
-    console.error(" Error:", error.message);
+    console.error(" Backend Error:", error.message);
     res.status(500).json({ error: "Analysis failed", details: error.message });
   }
 });
 
 // --- 5. SERVER START ---
 const PORT = process.env.PORT || 10000;
-// We listen on 0.0.0.0 to ensure the host maps correctly on Render
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(` Server listening on port ${PORT}`);
+  console.log(`🚀 Server listening on port ${PORT}`);
 });

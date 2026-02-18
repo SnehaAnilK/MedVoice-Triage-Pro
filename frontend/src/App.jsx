@@ -25,8 +25,10 @@ function App() {
   };
 
   const stopRecording = () => {
-    mediaRecorder.current.stop();
-    setIsRecording(false);
+    if (mediaRecorder.current) {
+      mediaRecorder.current.stop();
+      setIsRecording(false);
+    }
   };
 
   const sendAudioToBackend = async () => {
@@ -36,17 +38,20 @@ function App() {
     formData.append('audio', audioBlob);
 
     try {
-      const response = await axios.post('https://medvoice-backend.onrender.com/api/triage', formData);
+      // Updated with explicit headers for file uploads
+      const response = await axios.post('https://medvoice-backend.onrender.com/api/triage', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       setResult(response.data);
     } catch (error) {
       console.error("Error analyzing audio", error);
+      alert("Network Error: Could not reach the medical AI. Check console for details.");
     }
     setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center p-6 md:p-12 font-sans">
-      {/* Header */}
       <nav className="w-full max-w-4xl flex justify-between items-center mb-12">
         <div className="flex items-center gap-2">
           <div className="bg-blue-600 p-2 rounded-lg">
@@ -54,17 +59,15 @@ function App() {
           </div>
           <h1 className="text-xl font-bold text-slate-800 tracking-tight">MedVoice <span className="text-blue-600">AI</span></h1>
         </div>
-        <div className="flex items-center gap-4 text-sm font-medium text-slate-500">
+        <div className="flex items-center gap-4 text-sm font-medium text-slate-500 text-[10px] uppercase tracking-widest">
           <span className="flex items-center gap-1"><Clock size={16}/> Real-time Triage</span>
         </div>
       </nav>
 
-      {/* Main Card */}
       <main className="bg-white p-8 md:p-12 rounded-3xl shadow-2xl shadow-blue-100 w-full max-w-xl border border-slate-100 text-center">
         <h2 className="text-2xl font-bold text-slate-800 mb-2">Patient Voice Intake</h2>
-        <p className="text-slate-500 mb-10">Describe your symptoms clearly. Our AI will assess severity.</p>
+        <p className="text-slate-500 mb-10 text-sm">Describe your symptoms clearly. Our AI will assess severity.</p>
 
-        {/* Pulse Button Area */}
         <div className="relative flex justify-center mb-10">
           {isRecording && (
             <motion.div 
@@ -84,13 +87,11 @@ function App() {
           </button>
         </div>
 
-        {/* Status indicator */}
         <div className="h-8">
             {isRecording && <p className="text-red-500 font-bold animate-pulse uppercase text-xs tracking-widest">Recording Audio...</p>}
-            {loading && <p className="text-blue-600 font-medium animate-bounce italic">Analyzing with Gemini 1.5 Flash...</p>}
+            {loading && <p className="text-blue-600 font-medium animate-bounce italic text-sm">Analyzing with Gemini AI...</p>}
         </div>
 
-        {/* Result Area */}
         <AnimatePresence>
           {result && (
             <motion.div 
@@ -100,8 +101,8 @@ function App() {
             >
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
-                  <ShieldAlert className={result.severity === 'High' ? 'text-red-600' : 'text-yellow-600'} />
-                  <span className={`font-black uppercase tracking-tighter ${result.severity === 'High' ? 'text-red-600' : 'text-slate-700'}`}>
+                  <ShieldAlert className={result.severity === 'High' ? 'text-red-600' : 'text-yellow-600'} size={20} />
+                  <span className={`font-black uppercase tracking-tighter text-sm ${result.severity === 'High' ? 'text-red-600' : 'text-slate-700'}`}>
                     Priority: {result.severity}
                   </span>
                 </div>
